@@ -7,12 +7,12 @@ Created on Jan 1, 2011
 @group: Computer Science Department, Asa Ben-Hur's laboratory 
 '''
 
-from . import utils
+import utils
 import tempfile
-from . import programs
-from . import eprimerparser
-from . import primersearchutils
-from . import fastaparser
+import programs
+import eprimerparser
+import primersearchutils
+import fastaparser
 import exceptions
 
 
@@ -38,8 +38,8 @@ class PrimerManager( object ):
         #eleminate all sequences that are lees than the desired amplification size...
        
         if len( sequences ) == 4 :
-            print(sequences)
-        sequences = [x for x in sequences if len( x ) >= 200]
+            print sequences
+        sequences = filter( lambda x: len( x ) >= 200, sequences )
         
         primerFastaFile = utils.getTemporaryDirectory( ) + "/sequenceForEprimer.fasta"
         fastaparser.writeFastaFile( sequences, primerFastaFile )
@@ -73,7 +73,36 @@ class PrimerManager( object ):
              raise utils.NoPrimersExistException( )
         
         return primers
-        
+ 
+    def crossValidatePrimers2( self, primers, includeFile, j ):    
+        includeSequences = fastaparser.parseFastaFile( includeFile )
+        #write a primer search input file with using the primers argument
+        primerInputFileName = utils.getTemporaryDirectory( ) + "/tmpinputprimers2.ps" + str(j)
+        primerOutputFileName = utils.getTemporaryDirectory( ) + "/tmpoutputprimers2.ps" + str(j)
+        primersearchutils.writePrimerSearchInputFile( primers, primerInputFileName )
+
+        utils.logMessage( "PrimerManager::crossValidatePrimers", "finding primers that are in the supplied include file" )
+        #run primer search to identify the primers
+        self.primersearch.execute( [ includeFile, primerInputFileName, primerOutputFileName, "0" ] )
+
+        #read the found primers from the file
+        commonPrimers = primersearchutils.parsePrimerSearchFile( primerOutputFileName )
+
+        #compose a list of primers that are not found in the exclude file...
+        returnValue = [ ]
+
+        for primer in primers:
+            if primer.id in commonPrimers:
+                returnValue.append( primer )
+
+        utils.logMessage( "PrimerManager::crossValidatePrimers", "{0} unique primers identified out of {1}".format( len( returnValue ), len( primers ) ) )
+
+        if len( returnValue  ) == 0:
+            raise utils.NoPrimersExistException( )
+
+        return returnValue
+
+    
     def crossValidatePrimers( self, primers, excludeFile ):             
         
         excludeSequences = fastaparser.parseFastaFile( excludeFile )
@@ -85,7 +114,7 @@ class PrimerManager( object ):
         
         utils.logMessage( "PrimerManager::crossValidatePrimers", "finding primers that are not in the supplied exclude file" )
         #run primer search to identify the primers
-        self.primersearch.execute( [ excludeFile, primerInputFileName, primerOutputFileName, "0" ] )
+        self.primersearch.execute( [ excludeFile, primerInputFileName, primerOutputFileName, "10" ] )
         
         #read the found primers from the file
         commonPrimers = primersearchutils.parsePrimerSearchFile( primerOutputFileName )
